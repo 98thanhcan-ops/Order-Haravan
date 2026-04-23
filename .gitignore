@@ -1,0 +1,5 @@
+Orders_T*.xlsx
+*.log
+report_watcher*.log
+*.tmp
+.DS_Store
