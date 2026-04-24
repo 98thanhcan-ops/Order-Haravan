@@ -3,3 +3,4 @@ Orders_T*.xlsx
 report_watcher*.log
 *.tmp
 .DS_Store
+.codex_excel_work/
