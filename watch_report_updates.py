@@ -8,7 +8,10 @@ from pathlib import Path
 
 BASE_DIR = Path("/Users/nguyencan/Library/CloudStorage/OneDrive-TARA/Order Haravan")
 MAPPING_FILE = Path("/Users/nguyencan/Downloads/Copy of list-sp-hien-website.xlsx")
-GENERATE_SCRIPT = BASE_DIR / "generate_report.py"
+GENERATE_SCRIPTS = [
+    BASE_DIR / "generate_report.py",
+    BASE_DIR / "generate_hoang_anh_request.py",
+]
 LOG_FILE = BASE_DIR / "report_watcher.log"
 POLL_SECONDS = 5
 
@@ -17,7 +20,7 @@ def watched_files():
     files = sorted(BASE_DIR.glob("Orders_T*_20*.xlsx"))
     if MAPPING_FILE.exists():
         files.append(MAPPING_FILE)
-    files.append(GENERATE_SCRIPT)
+    files.extend(path for path in GENERATE_SCRIPTS if path.exists())
     return files
 
 
@@ -43,20 +46,24 @@ def log(message):
 
 
 def generate():
-    log("Change detected, regenerating report...")
-    result = subprocess.run(
-        [sys.executable, str(GENERATE_SCRIPT)],
-        cwd=str(BASE_DIR),
-        text=True,
-        capture_output=True,
-    )
-    if result.stdout.strip():
-        log(result.stdout.strip())
-    if result.returncode != 0:
-        if result.stderr.strip():
-            log(result.stderr.strip())
-        return False
-    return True
+    log("Change detected, regenerating reports...")
+    ok = True
+    for script in GENERATE_SCRIPTS:
+        if not script.exists():
+            continue
+        result = subprocess.run(
+            [sys.executable, str(script)],
+            cwd=str(BASE_DIR),
+            text=True,
+            capture_output=True,
+        )
+        if result.stdout.strip():
+            log(result.stdout.strip())
+        if result.returncode != 0:
+            ok = False
+            if result.stderr.strip():
+                log(result.stderr.strip())
+    return ok
 
 
 def main():
