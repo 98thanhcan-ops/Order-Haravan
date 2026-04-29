@@ -12,6 +12,8 @@ import generate_report as base
 
 BASE_DIR = Path("/Users/nguyencan/Library/CloudStorage/OneDrive-TARA/Order Haravan")
 OUTPUT_FILE = BASE_DIR / "Hoang Anh Request.html"
+PUBLISHED_DIR = BASE_DIR / "hoang-anh-request"
+PUBLISHED_FILE = PUBLISHED_DIR / "index.html"
 NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 
@@ -978,8 +980,11 @@ def main():
     records, _ = build_records()
     dataset = aggregate(records)
     html = HTML_TEMPLATE.replace("__DATA__", json.dumps(dataset, ensure_ascii=False))
+    PUBLISHED_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_FILE.write_text(html, encoding="utf-8")
+    PUBLISHED_FILE.write_text(html, encoding="utf-8")
     print(f"Generated: {OUTPUT_FILE}")
+    print(f"Published: {PUBLISHED_FILE}")
     print(f"Records: {dataset['meta']['recordCount']}")
     print(f"Date range: {dataset['meta']['minDate']} -> {dataset['meta']['maxDate']}")
 
