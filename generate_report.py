@@ -92,7 +92,9 @@ def normalize_channel(value: str) -> str:
         return "unknown"
     replacements = {
         "thu_1_doi_1": "promo",
-        "harasocial": "social",
+        "harasocial": "web",
+        "social": "web",
+        "phone": "web",
     }
     return replacements.get(text, text)
 
@@ -1658,7 +1660,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (state.rawPeriod === "year") {
         return { key: String(part.year), label: String(part.year), year: part.year };
       }
-      return { key: `${part.weekYear}-W${String(part.week).padStart(2, "0")}`, label: `${state.lang === "en" ? "Week" : "Tuần"} ${part.week}`, year: part.weekYear };
+      return { key: `${part.weekYear}-W${String(part.week).padStart(2, "0")}`, label: String(part.week), year: part.weekYear };
     }
 
     function aggregateRawData(records) {
@@ -1687,7 +1689,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       return Array.from(map.values())
         .map(row => ({ ...row, asp: row.volume ? row.revenue / row.volume : 0 }))
         .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 500);
+        ;
     }
 
     function sortByRevenue(items) {
