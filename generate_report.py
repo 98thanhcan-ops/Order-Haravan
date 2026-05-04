@@ -851,6 +851,38 @@ HTML_TEMPLATE = r"""<!doctype html>
       font-size: 12px;
       line-height: 1.5;
     }
+    .raw-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: end;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .raw-toolbar-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: end;
+      flex: 1 1 auto;
+    }
+    .raw-table table {
+      min-width: 1380px;
+    }
+    .raw-thumb {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+      border-radius: 12px;
+      border: 1px solid #e5edf6;
+      background: white;
+      padding: 4px;
+    }
+    .raw-product {
+      max-width: 240px;
+      white-space: normal;
+      line-height: 1.35;
+    }
     .empty {
       padding: 30px 0;
       text-align: center;
@@ -1114,6 +1146,27 @@ HTML_TEMPLATE = r"""<!doctype html>
         `Barcode`, `Link hình`, `Key Group Summer`, `Classify` được join từ file `/Users/nguyencan/Downloads/Copy of list-sp-hien-website.xlsx`. So sánh `% Δ` dùng kỳ trước có cùng số ngày với kỳ đang chọn.
       </div>
     </section>
+
+    <h2 class="section-title" data-i18n="sectionRaw">6. Raw Data</h2>
+    <section class="panel">
+      <div class="raw-toolbar">
+        <div class="raw-toolbar-group">
+          <div class="toolbar-item" style="min-width:220px; max-width:260px">
+            <label class="toolbar-label" for="rawPeriodFilter" data-i18n="rawDateScope">Chọn phạm vi ngày</label>
+            <select id="rawPeriodFilter">
+              <option value="week">Tuần</option>
+              <option value="month">Tháng</option>
+              <option value="year">Năm</option>
+              <option value="day">Ngày</option>
+            </select>
+          </div>
+        </div>
+        <button id="downloadRawData" class="download-btn" data-i18n="rawDownload">Tải raw data</button>
+      </div>
+      <h3 data-i18n="rawTitle">Raw data by period</h3>
+      <div id="rawTable"></div>
+      <div class="note">%MG không có trong nguồn Haravan hiện tại nên được bỏ qua ở bảng raw data này.</div>
+    </section>
   </div>
 
   <script>
@@ -1144,6 +1197,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         classify: { key: "revenue", dir: "desc" },
       },
       skuSort: { key: "revenue", dir: "desc" },
+      rawPeriod: "week",
     };
 
     const multiSelectConfig = {
@@ -1191,6 +1245,18 @@ HTML_TEMPLATE = r"""<!doctype html>
         classifySub: "Phân tích theo BCG/Classify",
         classifySummary: "Tổng hợp Classify",
         sectionSku: "5. Performance by SKU",
+        sectionRaw: "6. Raw Data",
+        rawTitle: "Raw data theo kỳ",
+        rawDateScope: "Chọn phạm vi ngày",
+        rawWeek: "Tuần",
+        rawMonth: "Tháng",
+        rawYear: "Năm",
+        rawDay: "Ngày",
+        rawDownload: "Tải raw data",
+        orderWeek: "Order Date (Tuần)",
+        orderMonth: "Order Date (Tháng)",
+        orderYear: "Order Date (Năm)",
+        salesChannel: "Kênh bán hàng",
         detailChannel: "Detail filter - Kênh bán",
         detailGroup: "Detail filter - Group",
         downloadData: "Tải data",
@@ -1241,6 +1307,18 @@ HTML_TEMPLATE = r"""<!doctype html>
         classifySub: "Analysis by BCG/Classify",
         classifySummary: "Classify summary",
         sectionSku: "5. Performance by SKU",
+        sectionRaw: "6. Raw Data",
+        rawTitle: "Raw data by period",
+        rawDateScope: "Date scope",
+        rawWeek: "Week",
+        rawMonth: "Month",
+        rawYear: "Year",
+        rawDay: "Day",
+        rawDownload: "Download raw data",
+        orderWeek: "Order Date (Week)",
+        orderMonth: "Order Date (Month)",
+        orderYear: "Order Date (Year)",
+        salesChannel: "Sales channel",
         detailChannel: "Detail filter - Channel",
         detailGroup: "Detail filter - Group",
         downloadData: "Download data",
@@ -1277,8 +1355,10 @@ HTML_TEMPLATE = r"""<!doctype html>
       document.getElementById("toDate").addEventListener("change", (e) => { state.to = e.target.value; render(); });
       document.getElementById("cancelFilter").addEventListener("change", (e) => { state.cancel = e.target.value; render(); });
       document.getElementById("langToggle").addEventListener("change", (e) => { state.lang = e.target.value; applyI18n(); render(); });
+      document.getElementById("rawPeriodFilter").addEventListener("change", (e) => { state.rawPeriod = e.target.value; render(); });
       document.getElementById("downloadSkuData").addEventListener("click", downloadSkuData);
       document.getElementById("downloadGroupData").addEventListener("click", downloadGroupData);
+      document.getElementById("downloadRawData").addEventListener("click", downloadRawData);
       document.addEventListener("click", handleOutsideClick);
 
       applyI18n();
@@ -1295,11 +1375,20 @@ HTML_TEMPLATE = r"""<!doctype html>
       document.getElementById("downloadSkuData").textContent = dict.downloadData;
       const groupDownload = document.getElementById("downloadGroupData");
       if (groupDownload) groupDownload.textContent = dict.downloadGroup;
+      const rawDownload = document.getElementById("downloadRawData");
+      if (rawDownload) rawDownload.textContent = dict.rawDownload;
       const cancel = document.getElementById("cancelFilter");
       if (cancel) {
         cancel.options[0].text = state.lang === "en" ? "All" : "Tất cả";
         cancel.options[1].text = "No";
         cancel.options[2].text = "Yes";
+      }
+      const rawPeriod = document.getElementById("rawPeriodFilter");
+      if (rawPeriod) {
+        rawPeriod.options[0].text = dict.rawWeek;
+        rawPeriod.options[1].text = dict.rawMonth;
+        rawPeriod.options[2].text = dict.rawYear;
+        rawPeriod.options[3].text = dict.rawDay;
       }
       Object.keys(multiSelectConfig).forEach(name => renderMultiSelect(name));
     }
@@ -1546,6 +1635,61 @@ HTML_TEMPLATE = r"""<!doctype html>
       return Array.from(map.values());
     }
 
+    function getDateParts(isoDate) {
+      const dt = new Date(isoDate + "T00:00:00");
+      const year = dt.getFullYear();
+      const month = dt.getMonth() + 1;
+      const weekday = dt.getDay() || 7;
+      dt.setDate(dt.getDate() + 4 - weekday);
+      const weekYear = dt.getFullYear();
+      const yearStart = new Date(weekYear, 0, 1);
+      const week = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+      return { year, month, week, weekYear };
+    }
+
+    function rawPeriodInfo(isoDate) {
+      const part = getDateParts(isoDate);
+      if (state.rawPeriod === "day") {
+        return { key: isoDate, label: isoDate, year: part.year };
+      }
+      if (state.rawPeriod === "month") {
+        return { key: `${part.year}-${String(part.month).padStart(2, "0")}`, label: `${state.lang === "en" ? "Month" : "tháng"} ${part.month}`, year: part.year };
+      }
+      if (state.rawPeriod === "year") {
+        return { key: String(part.year), label: String(part.year), year: part.year };
+      }
+      return { key: `${part.weekYear}-W${String(part.week).padStart(2, "0")}`, label: `${state.lang === "en" ? "Week" : "Tuần"} ${part.week}`, year: part.weekYear };
+    }
+
+    function aggregateRawData(records) {
+      const map = new Map();
+      for (const item of records) {
+        const period = rawPeriodInfo(item.d);
+        const key = [item.s, item.c, period.key].join("||");
+        const row = map.get(key) || {
+          image: item.i,
+          barcode: item.s,
+          product: item.p,
+          group: item.g,
+          classify: item.cl,
+          orderDateLabel: period.label,
+          orderYear: period.year,
+          channel: item.c,
+          revenue: 0,
+          volume: 0,
+        };
+        row.revenue += item.r;
+        row.volume += item.q;
+        if (!row.image && item.i) row.image = item.i;
+        if (!row.product || row.product.length < item.p.length) row.product = item.p;
+        map.set(key, row);
+      }
+      return Array.from(map.values())
+        .map(row => ({ ...row, asp: row.volume ? row.revenue / row.volume : 0 }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 500);
+    }
+
     function sortByRevenue(items) {
       return items.slice().sort((a, b) => b.revenue - a.revenue);
     }
@@ -1602,6 +1746,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       renderBreakdown("keySummer", "ks", current, previous);
       renderBreakdown("classify", "cl", current, previous);
       renderSkuTable(current, previous);
+      renderRawTable(current);
     }
 
     function setMetric(valueId, deltaId, current, previous, formatter, inverse) {
@@ -1925,6 +2070,54 @@ HTML_TEMPLATE = r"""<!doctype html>
       </table></div>`;
     }
 
+    function renderRawTable(current) {
+      const rows = aggregateRawData(current);
+      if (!rows.length) {
+        document.getElementById("rawTable").innerHTML = `<div class="empty">${t("noData")}</div>`;
+        return;
+      }
+      const periodLabel = state.rawPeriod === "month"
+        ? t("orderMonth")
+        : state.rawPeriod === "year"
+          ? t("orderYear")
+          : state.rawPeriod === "day"
+            ? (state.lang === "en" ? "Order Date" : "Ngày đặt hàng")
+            : t("orderWeek");
+      const body = rows.map((row, idx) => `<tr>
+        <td class="rank">${idx + 1}.</td>
+        <td>${row.image ? `<img class="raw-thumb" src="${escapeAttr(row.image)}" alt="${escapeAttr(row.product)}" loading="lazy" />` : ""}</td>
+        <td><span class="sku-code">${escapeHtml(row.barcode)}</span></td>
+        <td class="raw-product">${escapeHtml(row.product)}</td>
+        <td>${escapeHtml(translateDataValue(row.group))}</td>
+        <td>${escapeHtml(translateDataValue(row.classify || "Chưa phân loại"))}</td>
+        <td>${escapeHtml(row.orderDateLabel)}</td>
+        <td>${escapeHtml(String(row.orderYear))}</td>
+        <td>${escapeHtml(translateDataValue(row.channel))}</td>
+        <td>${formatCompactCurrency(row.revenue)}</td>
+        <td>${formatCompactUnits(row.volume)}</td>
+        <td>${formatCompactCurrency(row.asp)}</td>
+      </tr>`).join("");
+      document.getElementById("rawTable").innerHTML = `<div class="table-scroll raw-table"><table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>${t("image")}</th>
+            <th>Barcode</th>
+            <th>${t("productName")}</th>
+            <th>Group</th>
+            <th>Product Classify</th>
+            <th>${periodLabel}</th>
+            <th>${t("orderYear")}</th>
+            <th>${t("salesChannel")}</th>
+            <th>${t("revenue")}</th>
+            <th>${t("volume")}</th>
+            <th>${t("asp")}</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table></div>`;
+    }
+
     function translateDataValue(value) {
       if (state.lang !== "en") return value;
       const map = {
@@ -1983,6 +2176,37 @@ HTML_TEMPLATE = r"""<!doctype html>
       const a = document.createElement("a");
       a.href = url;
       a.download = `${t("downloadFileNameGroup")}.csv`;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadRawData() {
+      const filtered = filterRecords(REPORT_DATA.records, state.from, state.to);
+      const rows = aggregateRawData(filtered);
+      const csv = buildCsv(
+        ["image","barcode","product_name","group","product_classify","order_period","order_year","sales_channel","revenue","volume","asp"],
+        rows.map(row => [
+          row.image || "",
+          row.barcode,
+          row.product,
+          row.group,
+          row.classify || "",
+          row.orderDateLabel,
+          row.orderYear,
+          row.channel,
+          row.revenue,
+          row.volume,
+          row.asp
+        ])
+      );
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `order_haravan_raw_${state.rawPeriod}.csv`;
       a.style.display = "none";
       document.body.appendChild(a);
       a.click();

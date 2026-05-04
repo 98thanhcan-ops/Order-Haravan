@@ -8,33 +8,30 @@ from pathlib import Path
 
 BASE_DIR = Path("/Users/nguyencan/Library/CloudStorage/OneDrive-TARA/Order Haravan")
 MAPPING_FILE = Path("/Users/nguyencan/Downloads/Copy of list-sp-hien-website.xlsx")
+LOCAL_DIR = Path("/Users/nguyencan/Library/Application Support/OrderHaravanReport")
 GENERATE_SCRIPTS = [
-    BASE_DIR / "generate_report.py",
-    BASE_DIR / "generate_hoang_anh_request.py",
+    LOCAL_DIR / "generate_report.py",
+    LOCAL_DIR / "generate_hoang_anh_request.py",
 ]
 LOG_FILE = BASE_DIR / "report_watcher.log"
-POLL_SECONDS = 5
+PUBLISH_FILES = [
+    BASE_DIR / "index.html",
+    BASE_DIR / "order_report.html",
+    BASE_DIR / "Hoang Anh Request.html",
+    BASE_DIR / "hoang-anh-request" / "index.html",
+    BASE_DIR / "generate_report.py",
+    BASE_DIR / "generate_hoang_anh_request.py",
+    BASE_DIR / "watch_report_updates.py",
+]
 
 
-def watched_files():
-    files = sorted(BASE_DIR.glob("Orders_T*_20*.xlsx"))
-    if MAPPING_FILE.exists():
-        files.append(MAPPING_FILE)
-    files.extend(path for path in GENERATE_SCRIPTS if path.exists())
-    return files
-
-
-def snapshot(paths):
-    state = {}
-    for path in paths:
-        try:
-            stat = path.stat()
-        except FileNotFoundError:
-            state[str(path)] = None
-            continue
-        state[str(path)] = (stat.st_mtime_ns, stat.st_size)
-    return state
-
+def run_command(args):
+    return subprocess.run(
+        args,
+        cwd=str(BASE_DIR),
+        text=True,
+        capture_output=True,
+    )
 
 def log(message):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -46,17 +43,12 @@ def log(message):
 
 
 def generate():
-    log("Change detected, regenerating reports...")
+    log("Scheduled run, regenerating reports...")
     ok = True
     for script in GENERATE_SCRIPTS:
         if not script.exists():
             continue
-        result = subprocess.run(
-            [sys.executable, str(script)],
-            cwd=str(BASE_DIR),
-            text=True,
-            capture_output=True,
-        )
+        result = run_command([sys.executable, str(script)])
         if result.stdout.strip():
             log(result.stdout.strip())
         if result.returncode != 0:
@@ -66,17 +58,55 @@ def generate():
     return ok
 
 
+def publish():
+    tracked = [str(path.relative_to(BASE_DIR)) for path in PUBLISH_FILES if path.exists()]
+    if not tracked:
+        return True
+
+    status = run_command(["git", "status", "--short", "--"] + tracked)
+    if status.returncode != 0:
+        if status.stderr.strip():
+            log(status.stderr.strip())
+        return False
+    if not status.stdout.strip():
+        log("No publishable changes detected.")
+        return True
+
+    log("Publishable changes detected, committing and pushing...")
+    add = run_command(["git", "add", "--"] + tracked)
+    if add.returncode != 0:
+        if add.stderr.strip():
+            log(add.stderr.strip())
+        return False
+
+    commit_message = f"Auto update reports {time.strftime('%Y-%m-%d %H:%M:%S')}"
+    commit = run_command(["git", "commit", "-m", commit_message])
+    if commit.returncode != 0:
+        combined = "\n".join(part for part in [commit.stdout.strip(), commit.stderr.strip()] if part).strip()
+        if "nothing to commit" in combined.lower():
+            log("Nothing to commit after staging.")
+        elif combined:
+            log(combined)
+            return False
+
+    push = run_command(["git", "push", "origin", "HEAD:main"])
+    if push.returncode != 0:
+        combined = "\n".join(part for part in [push.stdout.strip(), push.stderr.strip()] if part).strip()
+        if combined:
+            log(combined)
+        return False
+
+    if push.stdout.strip():
+        log(push.stdout.strip())
+    if push.stderr.strip():
+        log(push.stderr.strip())
+    return True
+
+
 def main():
-    log("Watcher started.")
-    paths = watched_files()
-    previous = snapshot(paths)
-    while True:
-        time.sleep(POLL_SECONDS)
-        paths = watched_files()
-        current = snapshot(paths)
-        if current != previous:
-            generate()
-            previous = current
+    log("Scheduled watcher started.")
+    if generate():
+        publish()
 
 
 if __name__ == "__main__":
