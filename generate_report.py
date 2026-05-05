@@ -210,15 +210,16 @@ def read_product_mapping():
 
 def read_xlsx_records(path: Path, product_map):
     with zipfile.ZipFile(path) as zf:
+        shared = read_shared_strings(zf)
         root = ET.fromstring(zf.read("xl/worksheets/sheet1.xml"))
         rows = root.findall(".//x:sheetData/x:row", NS)
         if not rows:
             return []
-        header = parse_row(rows[0])
+        header = parse_row(rows[0], shared)
         index = {name: idx for idx, name in enumerate(header)}
         records = []
         for row in rows[1:]:
-            values = parse_row(row)
+            values = parse_row(row, shared)
             def get(column_name: str) -> str:
                 idx = index.get(column_name, -1)
                 return values[idx] if 0 <= idx < len(values) else ""
