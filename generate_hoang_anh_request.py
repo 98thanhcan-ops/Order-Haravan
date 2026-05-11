@@ -140,7 +140,8 @@ def read_rich_records(path: Path, product_map):
 def build_records():
     product_map = base.read_product_mapping()
     records = []
-    for path in sorted(BASE_DIR.glob("Orders_T*_20*.xlsx")):
+    order_files = sorted(set(BASE_DIR.glob("Orders_T*_20*.xlsx")) | set(BASE_DIR.glob("Order_T*_20*.xlsx")))
+    for path in order_files:
         records.extend(read_rich_records(path, product_map))
     if not records:
         raise SystemExit("No order data found.")
