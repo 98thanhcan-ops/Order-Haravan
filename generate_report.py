@@ -1145,6 +1145,18 @@ HTML_TEMPLATE = r"""<!doctype html>
       <div class="selected-chips" id="skuDetailGroupChips"></div>
       <h3 data-i18n="topSkuRevenue">Top SKU theo DT</h3>
       <div id="skuTable"></div>
+      <section style="display:grid; gap:20px; margin-top:20px">
+        <article class="panel">
+          <h3 data-i18n="topSkuGrowth">Top 20 Growth</h3>
+          <div class="panel-subtitle" data-i18n="skuTrendRule">Chi chon SKU co DT quy doi > 5 trieu / tuan</div>
+          <div id="skuGrowthTable"></div>
+        </article>
+        <article class="panel">
+          <h3 data-i18n="topSkuReduce">Top 20 Reduce</h3>
+          <div class="panel-subtitle" data-i18n="skuTrendRule">Chi chon SKU co DT quy doi > 5 trieu / tuan</div>
+          <div id="skuReduceTable"></div>
+        </article>
+      </section>
       <div class="note">
         Nguồn dữ liệu: export Haravan trong thư mục local + mapping từ file website. `DT` đang được tính theo doanh thu line-item (`Giá sản phẩm x Số lượng`), để tránh nhân đôi `Tổng cộng` ở các đơn có nhiều sản phẩm.
         `Barcode`, `Link hình`, `Key Group Summer`, `Classify` được join từ file `/Users/nguyencan/Downloads/Copy of list-sp-hien-website.xlsx`. So sánh `% Δ` dùng kỳ trước có cùng số ngày với kỳ đang chọn.
@@ -1266,6 +1278,9 @@ HTML_TEMPLATE = r"""<!doctype html>
         downloadData: "Tải data",
         downloadGroup: "Tải group data",
         topSkuRevenue: "Top SKU theo DT",
+        topSkuGrowth: "Top 20 Growth",
+        topSkuReduce: "Top 20 Reduce",
+        skuTrendRule: "Chi chon SKU co DT quy doi > 5 trieu / tuan",
         revenue: "DT",
         volume: "Volume",
         asp: "ASP",
@@ -1328,6 +1343,9 @@ HTML_TEMPLATE = r"""<!doctype html>
         downloadData: "Download data",
         downloadGroup: "Download group data",
         topSkuRevenue: "Top SKU by revenue",
+        topSkuGrowth: "Top 20 Growth",
+        topSkuReduce: "Top 20 Reduce",
+        skuTrendRule: "Only SKUs with weekly-equivalent revenue above 5 million VND",
         revenue: "Revenue",
         volume: "Volume",
         asp: "ASP",
@@ -2026,10 +2044,60 @@ HTML_TEMPLATE = r"""<!doctype html>
       const prevMap = new Map(aggregateSku(previousFiltered).map(row => [row.sku, row]));
       if (!currentRows.length) {
         document.getElementById("skuTable").innerHTML = `<div class="empty">${t("noData")}</div>`;
+        document.getElementById("skuGrowthTable").innerHTML = `<div class="empty">${t("noData")}</div>`;
+        document.getElementById("skuReduceTable").innerHTML = `<div class="empty">${t("noData")}</div>`;
         return;
       }
       document.getElementById("skuTable").innerHTML = renderSkuTableMarkup(currentRows, prevMap);
+      document.getElementById("skuGrowthTable").innerHTML = renderSkuTrendTableMarkup(currentRows, prevMap, "growth");
+      document.getElementById("skuReduceTable").innerHTML = renderSkuTrendTableMarkup(currentRows, prevMap, "reduce");
       attachSkuSortHandlers(currentRows, prevMap);
+    }
+
+    function getSkuTrendRows(rows, prevMap, direction) {
+      const periodDays = Math.max(dayDiff(state.from, state.to), 1);
+      const weeklyThreshold = 5000000;
+      return rows.map(row => {
+        const prev = prevMap.get(row.sku) || { revenue: 0 };
+        return {
+          ...row,
+          deltaRevenue: pctDelta(row.revenue, prev.revenue),
+          weeklyRevenue: row.revenue / periodDays * 7,
+        };
+      }).filter(row => row.weeklyRevenue > weeklyThreshold)
+        .filter(row => direction === "growth" ? row.deltaRevenue > 0 : row.deltaRevenue < 0)
+        .sort((a, b) => direction === "growth" ? (b.deltaRevenue - a.deltaRevenue) : (a.deltaRevenue - b.deltaRevenue))
+        .slice(0, 20);
+    }
+
+    function renderSkuTrendTableMarkup(rows, prevMap, direction) {
+      const trendRows = getSkuTrendRows(rows, prevMap, direction);
+      if (!trendRows.length) {
+        return `<div class="empty">${t("noData")}</div>`;
+      }
+      const body = trendRows.map((row, idx) => `<tr>
+        <td class="rank">${idx + 1}.</td>
+        <td>${row.image ? `<img class="sku-thumb" src="${escapeAttr(row.image)}" alt="${escapeAttr(row.product)}" loading="lazy" />` : ''}</td>
+        <td><div class="sku-meta"><span class="sku-code">${escapeHtml(row.sku)}</span><span class="subtle">${escapeHtml(row.product)}</span></div></td>
+        <td>${escapeHtml(translateDataValue(row.group))}</td>
+        <td>${formatCompactCurrency(row.revenue)}</td>
+        <td>${formatCompactCurrency(row.weeklyRevenue)}</td>
+        <td>${deltaHtml(row.deltaRevenue)}</td>
+      </tr>`).join("");
+      return `<div class="table-scroll"><table class="compact-table">
+        <thead>
+          <tr>
+            <th style="width:40px"></th>
+            <th>${t("image")}</th>
+            <th>SKU</th>
+            <th>Group</th>
+            <th>${t("revenue")}</th>
+            <th>DT / tuần</th>
+            <th>% Δ</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table></div>`;
     }
 
     function renderSkuTableMarkup(rows, prevMap) {
