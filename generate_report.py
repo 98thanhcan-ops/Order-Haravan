@@ -2167,6 +2167,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           <td>${deltaHtml(pctDelta(row.volume, prev.volume))}</td>
           <td>${formatCompactCurrency(asp)}</td>
           <td>${deltaHtml(pctDelta(asp, prevAsp))}</td>
+          <td>${renderChannelBreakdown(row.channelRevenue, prev.channelRevenue)}</td>
         </tr>`;
       }).join("");
       return `<div class="table-scroll"><table>
@@ -2183,6 +2184,7 @@ HTML_TEMPLATE = r"""<!doctype html>
             <th>% Δ</th>
             <th><button class="sort-btn" data-sku-sort="true" data-sort-key="asp">${t("asp")} <span class="sort-indicator">${arrow("asp")}</span></button></th>
             <th>% Δ</th>
+            <th>Kênh</th>
           </tr>
         </thead>
         <tbody>${body}</tbody>
