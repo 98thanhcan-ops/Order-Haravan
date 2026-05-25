@@ -856,6 +856,12 @@ HTML_TEMPLATE = r"""<!doctype html>
       color: var(--ink);
       font-weight: 700;
     }
+    .channel-breakdown .channel-metric {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-end;
+    }
     .sku-code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 13px;
@@ -2080,6 +2086,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     function getSkuTrendRows(rows, prevMap, direction) {
       const periodDays = Math.max(dayDiff(state.from, state.to), 1);
       const weeklyThreshold = 5000000;
+      const excludedGroups = ["nồi", "chảo", "bình giữ nhiệt"];
       return rows.map(row => {
         const prev = prevMap.get(row.sku) || { revenue: 0 };
         return {
@@ -2088,12 +2095,16 @@ HTML_TEMPLATE = r"""<!doctype html>
           weeklyRevenue: row.revenue / periodDays * 7,
         };
       }).filter(row => row.weeklyRevenue > weeklyThreshold)
+        .filter(row => {
+          const groupName = String(row.group || "").trim().toLowerCase();
+          return !excludedGroups.some(name => groupName === name || groupName.startsWith(name + " "));
+        })
         .filter(row => direction === "growth" ? row.deltaRevenue > 0 : row.deltaRevenue < 0)
         .sort((a, b) => direction === "growth" ? (b.deltaRevenue - a.deltaRevenue) : (a.deltaRevenue - b.deltaRevenue))
         .slice(0, 20);
     }
 
-    function renderChannelBreakdown(channelRevenue, totalRevenue) {
+    function renderChannelBreakdown(channelRevenue, previousChannelRevenue) {
       const channels = [
         ["shopee", "Shopee"],
         ["tiktokshop", "TikTok"],
@@ -2101,8 +2112,8 @@ HTML_TEMPLATE = r"""<!doctype html>
       ];
       return `<div class="channel-breakdown">${channels.map(([key, label]) => {
         const revenue = channelRevenue?.[key] || 0;
-        const share = totalRevenue ? (revenue / totalRevenue) * 100 : 0;
-        return `<span><strong>${label}</strong><span>${formatCompactCurrency(revenue)} · ${formatPercent(share)}</span></span>`;
+        const previousRevenue = previousChannelRevenue?.[key] || 0;
+        return `<span><strong>${label}</strong><span class="channel-metric">${formatCompactCurrency(revenue)} ${deltaHtml(pctDelta(revenue, previousRevenue))}</span></span>`;
       }).join("")}</div>`;
     }
 
@@ -2117,9 +2128,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         <td><div class="sku-meta"><span class="sku-code">${escapeHtml(row.sku)}</span><span class="subtle">${escapeHtml(row.product)}</span></div></td>
         <td>${escapeHtml(translateDataValue(row.group))}</td>
         <td>${formatCompactCurrency(row.revenue)}</td>
-        <td>${formatCompactCurrency(row.weeklyRevenue)}</td>
-        <td>${renderChannelBreakdown(row.channelRevenue, row.revenue)}</td>
         <td>${deltaHtml(row.deltaRevenue)}</td>
+        <td>${renderChannelBreakdown(row.channelRevenue, (prevMap.get(row.sku) || {}).channelRevenue)}</td>
       </tr>`).join("");
       return `<div class="table-scroll"><table class="compact-table">
         <thead>
@@ -2129,9 +2139,8 @@ HTML_TEMPLATE = r"""<!doctype html>
             <th>SKU</th>
             <th>Group</th>
             <th>${t("revenue")}</th>
-            <th>DT / tuần</th>
-            <th>Kênh</th>
             <th>% Δ</th>
+            <th>Kênh</th>
           </tr>
         </thead>
         <tbody>${body}</tbody>
