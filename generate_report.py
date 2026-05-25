@@ -839,6 +839,23 @@ HTML_TEMPLATE = r"""<!doctype html>
       display: grid;
       gap: 4px;
     }
+    .channel-breakdown {
+      display: grid;
+      gap: 4px;
+      min-width: 220px;
+    }
+    .channel-breakdown span {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .channel-breakdown strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
     .sku-code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 13px;
@@ -1646,10 +1663,16 @@ HTML_TEMPLATE = r"""<!doctype html>
       const map = new Map();
       for (const item of records) {
         const key = item.s;
-        const row = map.get(key) || { sku: key, variant: item.v, product: item.p, group: item.g, keySummer: item.ks, classify: item.cl, image: item.i, revenue: 0, volume: 0, count: 0 };
+        const row = map.get(key) || {
+          sku: key, variant: item.v, product: item.p, group: item.g, keySummer: item.ks, classify: item.cl, image: item.i,
+          revenue: 0, volume: 0, count: 0, channelRevenue: { shopee: 0, tiktokshop: 0, web: 0 }
+        };
         row.revenue += item.r;
         row.volume += item.q;
         row.count += 1;
+        if (row.channelRevenue[item.c] !== undefined) {
+          row.channelRevenue[item.c] += item.r;
+        }
         if (!row.product || row.product.length < item.p.length) row.product = item.p;
         if (!row.image && item.i) row.image = item.i;
         map.set(key, row);
@@ -2070,6 +2093,19 @@ HTML_TEMPLATE = r"""<!doctype html>
         .slice(0, 20);
     }
 
+    function renderChannelBreakdown(channelRevenue, totalRevenue) {
+      const channels = [
+        ["shopee", "Shopee"],
+        ["tiktokshop", "TikTok"],
+        ["web", "Web"],
+      ];
+      return `<div class="channel-breakdown">${channels.map(([key, label]) => {
+        const revenue = channelRevenue?.[key] || 0;
+        const share = totalRevenue ? (revenue / totalRevenue) * 100 : 0;
+        return `<span><strong>${label}</strong><span>${formatCompactCurrency(revenue)} · ${formatPercent(share)}</span></span>`;
+      }).join("")}</div>`;
+    }
+
     function renderSkuTrendTableMarkup(rows, prevMap, direction) {
       const trendRows = getSkuTrendRows(rows, prevMap, direction);
       if (!trendRows.length) {
@@ -2082,6 +2118,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         <td>${escapeHtml(translateDataValue(row.group))}</td>
         <td>${formatCompactCurrency(row.revenue)}</td>
         <td>${formatCompactCurrency(row.weeklyRevenue)}</td>
+        <td>${renderChannelBreakdown(row.channelRevenue, row.revenue)}</td>
         <td>${deltaHtml(row.deltaRevenue)}</td>
       </tr>`).join("");
       return `<div class="table-scroll"><table class="compact-table">
@@ -2093,6 +2130,7 @@ HTML_TEMPLATE = r"""<!doctype html>
             <th>Group</th>
             <th>${t("revenue")}</th>
             <th>DT / tuần</th>
+            <th>Kênh</th>
             <th>% Δ</th>
           </tr>
         </thead>
