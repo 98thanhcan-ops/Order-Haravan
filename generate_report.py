@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 BASE_DIR = Path("/Users/nguyencan/Library/CloudStorage/OneDrive-TARA/Order Haravan")
 OUTPUT_FILE = BASE_DIR / "order_report.html"
 PRODUCT_MAP_PATH = Path("/Users/nguyencan/Downloads/Copy of list-sp-hien-website.xlsx")
+CONTRIBUTION_PATH = BASE_DIR / "% Contribution.xlsx"
 NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 
@@ -117,6 +118,55 @@ def derive_group(product_name: str) -> str:
 
 def choose_order_datetime(ordered_at: str, paid_at: str, delivered_at: str):
     return parse_datetime(ordered_at) or parse_datetime(paid_at) or parse_datetime(delivered_at)
+
+
+def excel_serial_to_month(value: str) -> str:
+    serial = int(safe_float(value))
+    dt = datetime(1899, 12, 30) + timedelta(days=serial)
+    return dt.strftime("%Y-%m")
+
+
+def read_source_contribution():
+    if not CONTRIBUTION_PATH.exists():
+        return {}
+
+    with zipfile.ZipFile(CONTRIBUTION_PATH) as zf:
+        shared = read_shared_strings(zf)
+        root = ET.fromstring(zf.read("xl/worksheets/sheet1.xml"))
+        rows = root.findall(".//x:sheetData/x:row", NS)
+        if not rows:
+            return {}
+        header = parse_row(rows[0], shared)
+        index = {name: idx for idx, name in enumerate(header)}
+
+        def get(values, column_name: str) -> str:
+            idx = index.get(column_name, -1)
+            return values[idx] if 0 <= idx < len(values) else ""
+
+        by_channel = defaultdict(dict)
+        for row in rows[1:]:
+            values = parse_row(row, shared)
+            channel = (get(values, "Kênh") or "").strip().lower()
+            if channel not in {"shopee", "tiktok"}:
+                continue
+            month = excel_serial_to_month(get(values, "Month"))
+            by_channel[channel][month] = {
+                "product_cart": safe_float(get(values, "% Product Cart")),
+                "livestream": safe_float(get(values, "%Livestream")),
+                "video": safe_float(get(values, "%Video")),
+                "affiliate": safe_float(get(values, "%Affiliate")),
+            }
+
+    # Fill forward the latest known monthly percentages so newer months can still render.
+    contribution = {}
+    for channel, month_map in by_channel.items():
+        latest = None
+        for month in sorted(month_map):
+            latest = month_map[month]
+            contribution[f"{channel}:{month}"] = latest
+        if latest is not None:
+            contribution[f"{channel}:__latest__"] = latest
+    return contribution
 
 
 def read_product_mapping():
@@ -281,6 +331,7 @@ def read_xlsx_records(path: Path, product_map):
 
 def build_dataset():
     product_map = read_product_mapping()
+    source_contribution = read_source_contribution()
     records = []
     order_files = sorted(set(BASE_DIR.glob("Orders_T*_20*.xlsx")) | set(BASE_DIR.glob("Order_T*_20*.xlsx")))
     for path in order_files:
@@ -312,6 +363,7 @@ def build_dataset():
             "skus": skus,
             "keySummers": key_summers,
             "classifies": classifies,
+            "sourceContribution": source_contribution,
             "recordCount": len(records),
             "hasProductMap": bool(product_map),
         },
@@ -591,6 +643,44 @@ HTML_TEMPLATE = r"""<!doctype html>
     .metric .delta {
       margin-top: 8px;
       font-size: 14px;
+      font-weight: 700;
+    }
+    .source-growth-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .source-card {
+      padding: 16px;
+      border: 1px solid #dbe6f0;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+      display: grid;
+      gap: 10px;
+    }
+    .source-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+    .source-total {
+      font-size: 28px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .source-split {
+      display: grid;
+      gap: 6px;
+    }
+    .source-split span {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .source-split strong {
+      color: var(--ink);
       font-weight: 700;
     }
     .delta.up { color: var(--green); }
@@ -1067,6 +1157,12 @@ HTML_TEMPLATE = r"""<!doctype html>
     </section>
 
     <section class="panel">
+      <h3 data-i18n="sourceGrowthTitle">Source of Growth</h3>
+      <div class="panel-subtitle" data-i18n="sourceGrowthSub">Phân bổ DT của Shopee và TikTok theo tỉ trọng source trong file % Contribution</div>
+      <div id="sourceGrowth"></div>
+    </section>
+
+    <section class="panel">
       <h3 data-i18n="dailyTrend">DT và Volume theo ngày</h3>
       <div class="legend">
         <span><i style="background:#4d89e8"></i> DT</span>
@@ -1267,6 +1363,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         keySummerHint: "Bấm chọn nhiều nhóm key summer",
         classifyHint: "Bấm chọn nhiều classify",
         sectionTotal: "1. Total DT / Volume",
+        sourceGrowthTitle: "Source of Growth",
+        sourceGrowthSub: "Phân bổ DT của Shopee và TikTok theo tỉ trọng source trong file % Contribution",
         dailyTrend: "DT và Volume theo ngày",
         sectionChannel: "2. Performance by Channel",
         channelShare: "Tỷ trọng doanh thu theo kênh",
@@ -1332,6 +1430,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         keySummerHint: "Select multiple key summer groups",
         classifyHint: "Select multiple classify values",
         sectionTotal: "1. Total Revenue / Volume",
+        sourceGrowthTitle: "Source of Growth",
+        sourceGrowthSub: "Allocate Shopee and TikTok revenue by source percentages from % Contribution",
         dailyTrend: "Revenue and Volume by day",
         sectionChannel: "2. Performance by Channel",
         channelShare: "Revenue share by channel",
@@ -1686,6 +1786,57 @@ HTML_TEMPLATE = r"""<!doctype html>
       return Array.from(map.values());
     }
 
+    function getContributionFor(channel, month) {
+      const direct = REPORT_DATA.meta.sourceContribution?.[`${channel}:${month}`];
+      if (direct) return direct;
+      return REPORT_DATA.meta.sourceContribution?.[`${channel}:__latest__`] || null;
+    }
+
+    function computeSourceGrowth(records) {
+      const sources = {
+        product_cart: { label: "Product Cart", shopee: 0, tiktok: 0 },
+        livestream: { label: "Livestream", shopee: 0, tiktok: 0 },
+        video: { label: "Video", shopee: 0, tiktok: 0 },
+        affiliate: { label: "Affiliate", shopee: 0, tiktok: 0 },
+      };
+      for (const item of records) {
+        const channel = item.c === "tiktokshop" ? "tiktok" : item.c;
+        if (!["shopee", "tiktok"].includes(channel)) continue;
+        const contribution = getContributionFor(channel, item.m);
+        if (!contribution) continue;
+        sources.product_cart[channel] += item.r * (contribution.product_cart || 0);
+        sources.livestream[channel] += item.r * (contribution.livestream || 0);
+        sources.video[channel] += item.r * (contribution.video || 0);
+        sources.affiliate[channel] += item.r * (contribution.affiliate || 0);
+      }
+      return Object.values(sources).map(row => ({
+        ...row,
+        total: row.shopee + row.tiktok,
+      }));
+    }
+
+    function renderSourceGrowth(records) {
+      const rows = computeSourceGrowth(records);
+      const total = rows.reduce((sum, row) => sum + row.total, 0);
+      if (!total) {
+        document.getElementById("sourceGrowth").innerHTML = `<div class="empty">${t("noData")}</div>`;
+        return;
+      }
+      const cards = rows.map(row => {
+        const share = total ? row.total / total * 100 : 0;
+        return `<article class="source-card">
+          <div class="source-title">${row.label}</div>
+          <div class="source-total">${formatCompactCurrency(row.total)}</div>
+          <div class="subtle">${formatPercent(share)} tổng source growth</div>
+          <div class="source-split">
+            <span><strong>Shopee</strong><span>${formatCompactCurrency(row.shopee)}</span></span>
+            <span><strong>TikTok</strong><span>${formatCompactCurrency(row.tiktok)}</span></span>
+          </div>
+        </article>`;
+      }).join("");
+      document.getElementById("sourceGrowth").innerHTML = `<div class="source-growth-grid">${cards}</div>`;
+    }
+
     function getDateParts(isoDate) {
       const dt = new Date(isoDate + "T00:00:00");
       const year = dt.getFullYear();
@@ -1791,6 +1942,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       setMetric("metricAsp", "metricAspDelta", summary.asp, prevSummary.asp, formatCompactCurrency, false);
       setMetric("metricCancel", "metricCancelDelta", summary.cancelRate, prevSummary.cancelRate, formatPercent, true);
 
+      renderSourceGrowth(current);
       renderTrendChart(current);
       renderBreakdown("channel", "c", current, previous);
       renderBreakdown("group", "g", current, previous);
