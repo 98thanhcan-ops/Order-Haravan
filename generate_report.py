@@ -683,6 +683,28 @@ HTML_TEMPLATE = r"""<!doctype html>
       color: var(--ink);
       font-weight: 700;
     }
+    .view-switch {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .view-switch button {
+      border: 1px solid #d7e4ef;
+      background: #eef7f5;
+      color: #527b75;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .view-switch button.active {
+      background: #4d89e8;
+      border-color: #4d89e8;
+      color: white;
+      box-shadow: 0 0 0 2px rgba(77,137,232,0.15);
+    }
     .delta.up { color: var(--green); }
     .delta.down { color: var(--red); }
     .delta.flat { color: var(--muted); }
@@ -797,8 +819,30 @@ HTML_TEMPLATE = r"""<!doctype html>
       white-space: nowrap;
     }
     .chart-shell {
+      position: relative;
       width: 100%;
       overflow-x: auto;
+    }
+    .chart-tooltip {
+      position: absolute;
+      z-index: 20;
+      pointer-events: none;
+      max-width: 260px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(19, 31, 45, 0.96);
+      color: white;
+      font-size: 12px;
+      line-height: 1.45;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.2);
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity .12s ease, transform .12s ease;
+      white-space: pre-line;
+    }
+    .chart-tooltip.visible {
+      opacity: 1;
+      transform: translateY(0);
     }
     svg {
       display: block;
@@ -1157,9 +1201,24 @@ HTML_TEMPLATE = r"""<!doctype html>
     </section>
 
     <section class="panel">
-      <h3 data-i18n="sourceGrowthTitle">Source of Growth</h3>
+      <div class="panel-head">
+        <h3 data-i18n="sourceGrowthTitle">Source of Growth</h3>
+        <div class="view-switch" id="trendViewSwitch">
+          <button type="button" data-trend-view="day" class="active" data-i18n="viewDay">Ngày</button>
+          <button type="button" data-trend-view="week" data-i18n="viewWeek">Tuần</button>
+          <button type="button" data-trend-view="month" data-i18n="viewMonth">Tháng</button>
+        </div>
+      </div>
       <div class="panel-subtitle" data-i18n="sourceGrowthSub">Phân bổ DT của Shopee và TikTok theo tỉ trọng source trong file % Contribution</div>
+      <div class="view-switch" id="sourceFocusSwitch">
+        <button type="button" data-source-focus="all" class="active" data-i18n="viewAll">Tất cả</button>
+        <button type="button" data-source-focus="product_cart" data-i18n="sourceProductCart">Product Cart</button>
+        <button type="button" data-source-focus="livestream" data-i18n="sourceLivestream">Live</button>
+        <button type="button" data-source-focus="video" data-i18n="sourceVideo">Video</button>
+        <button type="button" data-source-focus="affiliate" data-i18n="sourceAffiliate">Aff</button>
+      </div>
       <div id="sourceGrowth"></div>
+      <div class="chart-shell" id="sourceGrowthChart"></div>
     </section>
 
     <section class="panel">
@@ -1333,6 +1392,8 @@ HTML_TEMPLATE = r"""<!doctype html>
       },
       skuSort: { key: "revenue", dir: "desc" },
       rawPeriod: "week",
+      trendView: "day",
+      sourceFocus: "all",
     };
 
     const multiSelectConfig = {
@@ -1365,6 +1426,14 @@ HTML_TEMPLATE = r"""<!doctype html>
         sectionTotal: "1. Total DT / Volume",
         sourceGrowthTitle: "Source of Growth",
         sourceGrowthSub: "Phân bổ DT của Shopee và TikTok theo tỉ trọng source trong file % Contribution",
+        viewAll: "Tất cả",
+        viewDay: "Ngày",
+        viewWeek: "Tuần",
+        viewMonth: "Tháng",
+        sourceProductCart: "Product Cart",
+        sourceLivestream: "Live",
+        sourceVideo: "Video",
+        sourceAffiliate: "Aff",
         dailyTrend: "DT và Volume theo ngày",
         sectionChannel: "2. Performance by Channel",
         channelShare: "Tỷ trọng doanh thu theo kênh",
@@ -1432,6 +1501,14 @@ HTML_TEMPLATE = r"""<!doctype html>
         sectionTotal: "1. Total Revenue / Volume",
         sourceGrowthTitle: "Source of Growth",
         sourceGrowthSub: "Allocate Shopee and TikTok revenue by source percentages from % Contribution",
+        viewAll: "All",
+        viewDay: "Day",
+        viewWeek: "Week",
+        viewMonth: "Month",
+        sourceProductCart: "Product Cart",
+        sourceLivestream: "Live",
+        sourceVideo: "Video",
+        sourceAffiliate: "Aff",
         dailyTrend: "Revenue and Volume by day",
         sectionChannel: "2. Performance by Channel",
         channelShare: "Revenue share by channel",
@@ -1501,6 +1578,18 @@ HTML_TEMPLATE = r"""<!doctype html>
       document.getElementById("cancelFilter").addEventListener("change", (e) => { state.cancel = e.target.value; render(); });
       document.getElementById("langToggle").addEventListener("change", (e) => { state.lang = e.target.value; applyI18n(); render(); });
       document.getElementById("rawPeriodFilter").addEventListener("change", (e) => { state.rawPeriod = e.target.value; render(); });
+      document.querySelectorAll("[data-trend-view]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.trendView = btn.dataset.trendView;
+          render();
+        });
+      });
+      document.querySelectorAll("[data-source-focus]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.sourceFocus = btn.dataset.sourceFocus;
+          render();
+        });
+      });
       document.getElementById("downloadSkuData").addEventListener("click", downloadSkuData);
       document.getElementById("downloadGroupData").addEventListener("click", downloadGroupData);
       document.getElementById("downloadRawData").addEventListener("click", downloadRawData);
@@ -1535,6 +1624,12 @@ HTML_TEMPLATE = r"""<!doctype html>
         rawPeriod.options[2].text = dict.rawYear;
         rawPeriod.options[3].text = dict.rawDay;
       }
+      document.querySelectorAll("[data-trend-view]").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.trendView === state.trendView);
+      });
+      document.querySelectorAll("[data-source-focus]").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.sourceFocus === state.sourceFocus);
+      });
       Object.keys(multiSelectConfig).forEach(name => renderMultiSelect(name));
     }
 
@@ -1815,11 +1910,53 @@ HTML_TEMPLATE = r"""<!doctype html>
       }));
     }
 
+    function getVisibleSourceRows(rows) {
+      if (state.sourceFocus === "all") return rows;
+      return rows.filter(row => {
+        const keyMap = {
+          product_cart: "Product Cart",
+          livestream: "Livestream",
+          video: "Video",
+          affiliate: "Affiliate",
+        };
+        return row.label === keyMap[state.sourceFocus];
+      });
+    }
+
+    function computeSourceGrowthSeries(records) {
+      const map = new Map();
+      for (const item of records) {
+        const channel = item.c === "tiktokshop" ? "tiktok" : item.c;
+        if (!["shopee", "tiktok"].includes(channel)) continue;
+        const contribution = getContributionFor(channel, item.m);
+        if (!contribution) continue;
+        const period = trendPeriodInfo(item.d);
+        const row = map.get(period.key) || {
+          key: period.key,
+          label: period.label,
+          product_cart: 0,
+          livestream: 0,
+          video: 0,
+          affiliate: 0,
+        };
+        row.product_cart += item.r * (contribution.product_cart || 0);
+        row.livestream += item.r * (contribution.livestream || 0);
+        row.video += item.r * (contribution.video || 0);
+        row.affiliate += item.r * (contribution.affiliate || 0);
+        map.set(period.key, row);
+      }
+      return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key)).map(row => ({
+        ...row,
+        total: row.product_cart + row.livestream + row.video + row.affiliate,
+      }));
+    }
+
     function renderSourceGrowth(records) {
-      const rows = computeSourceGrowth(records);
+      const rows = getVisibleSourceRows(computeSourceGrowth(records));
       const total = rows.reduce((sum, row) => sum + row.total, 0);
       if (!total) {
         document.getElementById("sourceGrowth").innerHTML = `<div class="empty">${t("noData")}</div>`;
+        document.getElementById("sourceGrowthChart").innerHTML = `<div class="empty">${t("noData")}</div>`;
         return;
       }
       const cards = rows.map(row => {
@@ -1835,6 +1972,59 @@ HTML_TEMPLATE = r"""<!doctype html>
         </article>`;
       }).join("");
       document.getElementById("sourceGrowth").innerHTML = `<div class="source-growth-grid">${cards}</div>`;
+      renderSourceGrowthChart(records);
+    }
+
+    function renderSourceGrowthChart(records) {
+      const rows = computeSourceGrowthSeries(records);
+      if (!rows.length) {
+        document.getElementById("sourceGrowthChart").innerHTML = `<div class="empty">${t("noData")}</div>`;
+        return;
+      }
+      const width = Math.max(960, rows.length * 120);
+      const height = 420;
+      const pad = { top: 28, right: 24, bottom: 70, left: 64 };
+      const chartW = width - pad.left - pad.right;
+      const chartH = height - pad.top - pad.bottom;
+      const maxTotal = Math.max(...rows.map(r => r.total), 1);
+      const step = chartW / rows.length;
+      const barW = Math.max(26, step * 0.72);
+      const colors = { product_cart: "#f5a33b", livestream: "#141414", video: "#4d89e8", affiliate: "#53b59f" };
+      const labels = { product_cart: "Product Cart", livestream: "Livestream", video: "Video", affiliate: "Affiliate" };
+      const sourceKeys = state.sourceFocus === "all"
+        ? ["product_cart", "livestream", "video", "affiliate"]
+        : [state.sourceFocus];
+      let grid = "";
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.top + (chartH * i / 4);
+        grid += `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="#dbe6f0" stroke-width="1" />`;
+      }
+      const bars = rows.map((row, idx) => {
+        const cx = pad.left + idx * step + step / 2;
+        const x = cx - barW / 2;
+        let offset = 0;
+        const rects = sourceKeys.map(key => {
+          const value = row[key] || 0;
+          const h = (value / maxTotal) * chartH;
+          const y = pad.top + chartH - offset - h;
+          offset += h;
+          const tip = escapeAttrValue(`${row.label}\n${labels[key]}: ${formatCompactCurrency(value)}`);
+          return `<rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="3" fill="${colors[key]}" data-tip="${tip}"></rect>`;
+        }).join("");
+        const totalValue = sourceKeys.reduce((sum, key) => sum + (row[key] || 0), 0);
+        return `${rects}
+          <text x="${cx}" y="${Math.max(18, pad.top + chartH - offset - 8)}" text-anchor="middle" font-size="11" font-weight="700" fill="#60758d">Tổng ${formatCompactCurrency(totalValue)}</text>
+          <text x="${cx}" y="${height - 28}" text-anchor="middle" font-size="11" fill="#60758d">${row.label}</text>`;
+      }).join("");
+      const legendItems = sourceKeys.map(key => `<span><i style="background:${colors[key]}"></i> ${labels[key]}</span>`).join("");
+      document.getElementById("sourceGrowthChart").innerHTML = `
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Source of Growth chart">
+          ${grid}
+          <line x1="${pad.left}" y1="${pad.top + chartH}" x2="${width - pad.right}" y2="${pad.top + chartH}" stroke="#9fb3c8" stroke-width="1.2" />
+          ${bars}
+        </svg>
+        <div class="legend" style="margin-top:12px">${legendItems}</div>`;
+      attachChartTooltip("sourceGrowthChart");
     }
 
     function getDateParts(isoDate) {
@@ -1847,6 +2037,31 @@ HTML_TEMPLATE = r"""<!doctype html>
       const yearStart = new Date(weekYear, 0, 1);
       const week = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
       return { year, month, week, weekYear };
+    }
+
+    function trendPeriodInfo(isoDate) {
+      const part = getDateParts(isoDate);
+      if (state.trendView === "month") {
+        const key = `${part.year}-${String(part.month).padStart(2, "0")}`;
+        return { key, label: key };
+      }
+      if (state.trendView === "week") {
+        const key = `${part.weekYear}-W${String(part.week).padStart(2, "0")}`;
+        return { key, label: `${part.weekYear} W${part.week}` };
+      }
+      return { key: isoDate, label: formatShortDate(isoDate) };
+    }
+
+    function aggregateTrendRecords(records) {
+      const map = new Map();
+      for (const item of records) {
+        const period = trendPeriodInfo(item.d);
+        const row = map.get(period.key) || { key: period.key, label: period.label, revenue: 0, volume: 0 };
+        row.revenue += item.r;
+        row.volume += item.q;
+        map.set(period.key, row);
+      }
+      return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
     }
 
     function rawPeriodInfo(isoDate) {
@@ -1952,6 +2167,42 @@ HTML_TEMPLATE = r"""<!doctype html>
       renderRawTable(current);
     }
 
+    function escapeAttrValue(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function attachChartTooltip(containerId) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      let tooltip = container.querySelector(".chart-tooltip");
+      if (!tooltip) {
+        tooltip = document.createElement("div");
+        tooltip.className = "chart-tooltip";
+        container.appendChild(tooltip);
+      }
+      const targets = container.querySelectorAll("[data-tip]");
+      targets.forEach(target => {
+        target.addEventListener("mouseenter", (e) => {
+          tooltip.innerHTML = e.currentTarget.getAttribute("data-tip") || "";
+          tooltip.classList.add("visible");
+        });
+        target.addEventListener("mousemove", (e) => {
+          const bounds = container.getBoundingClientRect();
+          const x = e.clientX - bounds.left + container.scrollLeft + 14;
+          const y = e.clientY - bounds.top + container.scrollTop + 14;
+          tooltip.style.left = `${x}px`;
+          tooltip.style.top = `${y}px`;
+        });
+        target.addEventListener("mouseleave", () => {
+          tooltip.classList.remove("visible");
+        });
+      });
+    }
+
     function setMetric(valueId, deltaId, current, previous, formatter, inverse) {
       document.getElementById(valueId).textContent = formatter(current);
       const delta = pctDelta(current, previous);
@@ -1961,14 +2212,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     }
 
     function renderTrendChart(records) {
-      const map = new Map();
-      for (const item of records) {
-        const row = map.get(item.d) || { date: item.d, revenue: 0, volume: 0 };
-        row.revenue += item.r;
-        row.volume += item.q;
-        map.set(item.d, row);
-      }
-      const rows = Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+      const rows = aggregateTrendRecords(records);
       if (!rows.length) {
         document.getElementById("trendChart").innerHTML = `<div class="empty">${t("noData")}</div>`;
         return;
@@ -1983,8 +2227,8 @@ HTML_TEMPLATE = r"""<!doctype html>
       const step = chartW / rows.length;
       const barW = Math.max(10, step * 0.72);
       const labelCandidates = rows.length <= 31
-        ? new Set(rows.map(row => row.date))
-        : new Set(rows.slice().sort((a, b) => b.revenue - a.revenue).slice(0, 8).map(row => row.date).concat(rows.slice().sort((a, b) => b.volume - a.volume).slice(0, 8).map(row => row.date)));
+        ? new Set(rows.map(row => row.key))
+        : new Set(rows.slice().sort((a, b) => b.revenue - a.revenue).slice(0, 8).map(row => row.key).concat(rows.slice().sort((a, b) => b.volume - a.volume).slice(0, 8).map(row => row.key)));
 
       let bars = "";
       let labels = "";
@@ -2002,19 +2246,20 @@ HTML_TEMPLATE = r"""<!doctype html>
         const barHeight = (row.revenue / maxRevenue) * chartH;
         const x = cx - barW / 2;
         const y = pad.top + chartH - barHeight;
-        bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="#4d89e8" opacity="0.95"><title>${row.date} | DT ${formatCompactCurrency(row.revenue)} | Volume ${formatCompactUnits(row.volume)}</title></rect>`;
+        const tip = escapeAttrValue(`${row.label}\nDT: ${formatCompactCurrency(row.revenue)}\nVolume: ${formatCompactUnits(row.volume)}`);
+        bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="#4d89e8" opacity="0.95" data-tip="${tip}"></rect>`;
 
         const vy = pad.top + chartH - (row.volume / maxVolume) * chartH;
         volumePath += `${idx === 0 ? "M" : "L"} ${cx} ${vy} `;
-        volumeDots += `<circle cx="${cx}" cy="${vy}" r="4.5" fill="#f39a3f"><title>${row.date} | DT ${formatCompactCurrency(row.revenue)} | Volume ${formatCompactUnits(row.volume)}</title></circle>`;
+        volumeDots += `<circle cx="${cx}" cy="${vy}" r="4.5" fill="#f39a3f" data-tip="${tip}"></circle>`;
 
-        if (labelCandidates.has(row.date)) {
+        if (labelCandidates.has(row.key)) {
           bars += `<text x="${cx}" y="${Math.max(18, y - 8)}" text-anchor="middle" font-size="11" font-weight="700" fill="#4d89e8">${formatCompactCurrency(row.revenue)}</text>`;
           volumeDots += `<text x="${cx}" y="${Math.min(pad.top + chartH - 12, Math.max(16, vy - 12))}" text-anchor="middle" font-size="11" font-weight="700" fill="#f39a3f">${formatCompactUnits(row.volume)}</text>`;
         }
 
         if (idx % Math.ceil(rows.length / 16) === 0 || rows.length <= 16) {
-          labels += `<text x="${cx}" y="${height - 34}" text-anchor="end" transform="rotate(-35 ${cx} ${height - 34})" font-size="11" fill="#60758d">${formatShortDate(row.date)}</text>`;
+          labels += `<text x="${cx}" y="${height - 34}" text-anchor="end" transform="rotate(-35 ${cx} ${height - 34})" font-size="11" fill="#60758d">${row.label}</text>`;
         }
       });
 
@@ -2030,6 +2275,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           <text x="${width - pad.right + 16}" y="${pad.top + 8}" font-size="12" fill="#60758d">${t("volume")}</text>
         </svg>`;
       document.getElementById("trendChart").innerHTML = svg;
+      attachChartTooltip("trendChart");
     }
 
     function formatShortDate(iso) {
