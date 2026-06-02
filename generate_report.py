@@ -1855,10 +1855,16 @@ HTML_TEMPLATE = r"""<!doctype html>
       const map = new Map();
       for (const item of records) {
         const key = item[keyField];
-        const row = map.get(key) || { key, revenue: 0, volume: 0, count: 0 };
+        const row = map.get(key) || {
+          key, revenue: 0, volume: 0, count: 0,
+          channelRevenue: { shopee: 0, tiktokshop: 0, web: 0 }
+        };
         row.revenue += item.r;
         row.volume += item.q;
         row.count += 1;
+        if (row.channelRevenue[item.c] !== undefined) {
+          row.channelRevenue[item.c] += item.r;
+        }
         map.set(key, row);
       }
       return Array.from(map.values());
@@ -2423,14 +2429,19 @@ HTML_TEMPLATE = r"""<!doctype html>
         const asp = row.volume ? row.revenue / row.volume : 0;
         const prevAsp = prev.volume ? prev.revenue / prev.volume : 0;
         const share = totalRevenue ? (row.revenue / totalRevenue) * 100 : 0;
+        const channelBreakdown = type === "group"
+          ? `<td>${renderChannelBreakdown(row.channelRevenue, prev.channelRevenue)}</td>`
+          : "";
         return `<tr>
           <td class="rank">${idx + 1}.</td>
           <td>${escapeHtml(translateDataValue(row.key))}<div style="margin-top:4px"><span class="share-badge">${formatPercent(share)}</span></div></td>
           <td><div class="metric-cell"><div class="metric-main">${formatCompactCurrency(row.revenue)}</div>${deltaHtml(pctDelta(row.revenue, prev.revenue))}</div></td>
           <td><div class="metric-cell"><div class="metric-main">${formatCompactUnits(row.volume)}</div>${deltaHtml(pctDelta(row.volume, prev.volume))}</div></td>
           <td><div class="metric-cell"><div class="metric-main">${formatCompactCurrency(asp)}</div>${deltaHtml(pctDelta(asp, prevAsp))}</div></td>
+          ${channelBreakdown}
         </tr>`;
       }).join("");
+      const channelHeader = type === "group" ? "<th>Kênh</th>" : "";
       return `<div class="table-scroll"><table class="compact-table">
         <thead>
           <tr>
@@ -2439,6 +2450,7 @@ HTML_TEMPLATE = r"""<!doctype html>
             <th><button class="sort-btn" data-summary-sort="${type}" data-sort-key="revenue">${t("revenue")} <span class="sort-indicator">${arrow("revenue")}</span></button></th>
             <th><button class="sort-btn" data-summary-sort="${type}" data-sort-key="volume">${t("volume")} <span class="sort-indicator">${arrow("volume")}</span></button></th>
             <th><button class="sort-btn" data-summary-sort="${type}" data-sort-key="asp">${t("asp")} <span class="sort-indicator">${arrow("asp")}</span></button></th>
+            ${channelHeader}
           </tr>
         </thead>
         <tbody>${body}</tbody>
@@ -2687,11 +2699,16 @@ HTML_TEMPLATE = r"""<!doctype html>
       const rows = sortByRevenue(aggregateBy(filtered, "g"));
       const totalRevenue = rows.reduce((sum, row) => sum + row.revenue, 0);
       const csv = buildCsv(
-        ["group","revenue","volume","asp","share"],
+        ["group","revenue","volume","asp","share","shopee_revenue","tiktokshop_revenue","web_revenue"],
         rows.map(row => {
           const asp = row.volume ? row.revenue / row.volume : 0;
           const share = totalRevenue ? (row.revenue / totalRevenue) * 100 : 0;
-          return [row.key, row.revenue, row.volume, asp, share];
+          return [
+            row.key, row.revenue, row.volume, asp, share,
+            row.channelRevenue?.shopee || 0,
+            row.channelRevenue?.tiktokshop || 0,
+            row.channelRevenue?.web || 0,
+          ];
         })
       );
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
