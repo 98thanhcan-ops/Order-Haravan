@@ -108,6 +108,8 @@ def read_rich_records(path: Path, product_map):
             group_name = product_meta.get("website_group") or base.derive_group(product_name)
             if is_ignored_product(product_name, sku_code, variant_id):
                 continue
+            if base.is_excluded_report_group(group_name):
+                continue
 
             raw_channel = base.normalize_channel(get(values, "Kênh bán hàng"))
             channel_bucket, marketplace, is_online = classify_channel(raw_channel)
@@ -438,9 +440,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       margin: 0;
       font-family: "Segoe UI", Arial, sans-serif;
       color: var(--ink);
-      background:
-        radial-gradient(circle at top left, rgba(47,115,218,0.13), transparent 22%),
-        linear-gradient(180deg, #fbfdff 0%, #f2f6fb 100%);
+      background: #ffffff;
     }
     .page { max-width: 1600px; margin: 0 auto; padding: 18px 18px 60px; }
     .hero, .panel, .card { background: var(--card); border: 1px solid rgba(23,50,74,0.08); border-radius: var(--radius); box-shadow: var(--shadow); }
@@ -488,7 +488,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     .grid-2 { display: grid; grid-template-columns: 1.2fr .8fr; gap: 16px; }
     .stack { display: grid; gap: 16px; }
     .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-    .summary-box { background: #f8fbff; border: 1px solid #e5eef8; border-radius: 14px; padding: 14px; }
+    .summary-box { background: #ffffff; border: 1px solid #e5eef8; border-radius: 14px; padding: 14px; }
     .summary-box .label { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 800; }
     .summary-box .value { margin-top: 6px; font-size: 26px; font-weight: 800; }
     .viz-list { display: grid; gap: 10px; }

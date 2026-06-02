@@ -116,6 +116,11 @@ def derive_group(product_name: str) -> str:
     return prefix or "Khác"
 
 
+def is_excluded_report_group(group_name: str) -> bool:
+    normalized = (group_name or "").strip().lower()
+    return normalized in {"nồi", "chảo"}
+
+
 def choose_order_datetime(ordered_at: str, paid_at: str, delivered_at: str):
     return parse_datetime(ordered_at) or parse_datetime(paid_at) or parse_datetime(delivered_at)
 
@@ -303,6 +308,8 @@ def read_xlsx_records(path: Path, product_map):
             product_meta = product_map.get(variant_id, {})
             display_barcode = product_meta.get("barcode") or variant_id or product_name
             group_name = product_meta.get("website_group") or derive_group(product_name)
+            if is_excluded_report_group(group_name):
+                continue
             key_summer = product_meta.get("key_summer") or "Khác"
             classify = product_meta.get("classify") or "Chưa phân loại"
 
@@ -397,10 +404,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       margin: 0;
       font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
       color: var(--ink);
-      background:
-        radial-gradient(circle at top left, rgba(77,137,232,0.16), transparent 22%),
-        radial-gradient(circle at top right, rgba(243,154,63,0.12), transparent 18%),
-        linear-gradient(180deg, #f8fbff 0%, #f2f6fb 100%);
+      background: #ffffff;
     }
     .page {
       max-width: 1500px;
@@ -408,7 +412,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       padding: 18px 18px 60px;
     }
     .hero {
-      background: linear-gradient(135deg, #ffffff, #edf5ff);
+      background: #ffffff;
       border: 1px solid rgba(77,137,232,0.15);
       border-radius: 26px;
       box-shadow: var(--shadow);
@@ -569,7 +573,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       line-height: 1;
     }
     .summary-stat {
-      background: #f8fbff;
+      background: #ffffff;
       border: 1px solid #edf3f9;
       border-radius: 12px;
       padding: 10px 12px;
@@ -591,7 +595,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       margin-top: 12px;
       padding: 14px;
       border-radius: 16px;
-      background: linear-gradient(180deg, #edf5ff, #f8fbff);
+      background: #ffffff;
       border: 1px solid #dde9f5;
     }
     .summary-total-grid {
@@ -625,7 +629,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     }
     .metric {
       padding: 14px 16px;
-      background: linear-gradient(180deg, #eef6ff, #dcecff);
+      background: #ffffff;
       border-color: rgba(77,137,232,0.25);
     }
     .metric .label {
@@ -654,7 +658,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       padding: 16px;
       border: 1px solid #dbe6f0;
       border-radius: 16px;
-      background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+      background: #ffffff;
       display: grid;
       gap: 10px;
     }
