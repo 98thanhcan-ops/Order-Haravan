@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 BASE_DIR = Path("/Users/nguyencan/Library/CloudStorage/OneDrive-TARA/Order Haravan")
 OUTPUT_FILE = BASE_DIR / "order_report.html"
-PRODUCT_MAP_PATH = Path("/Users/nguyencan/Downloads/Copy of list-sp-hien-website.xlsx")
+PRODUCT_MAP_PATH = BASE_DIR / "products_08_06_2026_783570_1.xlsx.zip"
 CONTRIBUTION_PATH = BASE_DIR / "% Contribution.xlsx"
 NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
@@ -37,6 +37,22 @@ def read_shared_strings(zf):
     for item in root.findall("x:si", NS):
         shared.append("".join(node.text or "" for node in item.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t")))
     return shared
+
+
+def open_xlsx_zip(path: Path):
+    if path.suffix.lower() == ".xlsx":
+        return zipfile.ZipFile(path)
+    if path.suffix.lower() == ".zip":
+        outer = zipfile.ZipFile(path)
+        names = [name for name in outer.namelist() if name.lower().endswith(".xlsx")]
+        if not names:
+          outer.close()
+          raise FileNotFoundError(f"No .xlsx found inside {path}")
+        inner_bytes = outer.read(names[0])
+        outer.close()
+        from io import BytesIO
+        return zipfile.ZipFile(BytesIO(inner_bytes))
+    raise ValueError(f"Unsupported mapping format: {path}")
 
 
 def parse_row(row, shared=None):
@@ -178,7 +194,7 @@ def read_product_mapping():
     if not PRODUCT_MAP_PATH.exists():
         return {}
 
-    with zipfile.ZipFile(PRODUCT_MAP_PATH) as zf:
+    with open_xlsx_zip(PRODUCT_MAP_PATH) as zf:
         shared = read_shared_strings(zf)
         workbook = ET.fromstring(zf.read("xl/workbook.xml"))
         rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
@@ -187,7 +203,9 @@ def read_product_mapping():
         for sheet in workbook.find("x:sheets", NS):
             rid = sheet.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
             target = rel_map.get(rid, "")
-            if target and not target.startswith("xl/"):
+            if target.startswith("/"):
+                target = target.lstrip("/")
+            elif target and not target.startswith("xl/"):
                 target = "xl/" + target.lstrip("/")
             sheet_targets.append(target)
 
