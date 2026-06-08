@@ -979,13 +979,14 @@ HTML_TEMPLATE = r"""<!doctype html>
     }
     .channel-breakdown {
       display: grid;
-      gap: 4px;
-      min-width: 220px;
+      gap: 3px;
+      min-width: 170px;
     }
     .channel-breakdown span {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr);
+      align-items: baseline;
+      gap: 6px;
       font-size: 12px;
       color: var(--muted);
       white-space: nowrap;
@@ -993,12 +994,20 @@ HTML_TEMPLATE = r"""<!doctype html>
     .channel-breakdown strong {
       color: var(--ink);
       font-weight: 700;
+      text-align: left;
     }
     .channel-breakdown .channel-metric {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 4px;
       justify-content: flex-end;
+    }
+    .channel-breakdown .delta {
+      display: inline;
+      margin: 0;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
     }
     .sku-code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -2429,7 +2438,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         const asp = row.volume ? row.revenue / row.volume : 0;
         const prevAsp = prev.volume ? prev.revenue / prev.volume : 0;
         const share = totalRevenue ? (row.revenue / totalRevenue) * 100 : 0;
-        const channelBreakdown = type === "group"
+      const channelBreakdown = type !== "channel"
           ? `<td>${renderChannelBreakdown(row.channelRevenue, prev.channelRevenue)}</td>`
           : "";
         return `<tr>
@@ -2441,7 +2450,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           ${channelBreakdown}
         </tr>`;
       }).join("");
-      const channelHeader = type === "group" ? "<th>Kênh</th>" : "";
+      const channelHeader = type !== "channel" ? "<th>Kênh</th>" : "";
       return `<div class="table-scroll"><table class="compact-table">
         <thead>
           <tr>
