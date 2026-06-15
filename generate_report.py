@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 BASE_DIR = Path("/Users/nguyencan/Library/CloudStorage/OneDrive-TARA/Order Haravan")
 OUTPUT_FILE = BASE_DIR / "order_report.html"
 PRODUCT_MAP_PATH = BASE_DIR / "products_08_06_2026_783570_1.xlsx.zip"
+PRIORITY_MAP_PATH = BASE_DIR / "Apr_2026_Priority_KPI.xlsx"
 CONTRIBUTION_PATH = BASE_DIR / "% Contribution.xlsx"
 NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
@@ -281,7 +282,55 @@ def read_product_mapping():
         return product_map
 
 
-def read_xlsx_records(path: Path, product_map):
+def read_priority_mapping():
+    if not PRIORITY_MAP_PATH.exists():
+        return {}
+
+    with zipfile.ZipFile(PRIORITY_MAP_PATH) as zf:
+        shared = read_shared_strings(zf)
+        workbook = ET.fromstring(zf.read("xl/workbook.xml"))
+        rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
+        rel_map = {rel.attrib["Id"]: rel.attrib["Target"] for rel in rels}
+
+        detail_target = None
+        for sheet in workbook.find("x:sheets", NS):
+            if (sheet.attrib.get("name") or "").strip().lower() != "detail":
+                continue
+            rid = sheet.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+            target = rel_map.get(rid, "")
+            if target.startswith("/"):
+                target = target.lstrip("/")
+            elif target and not target.startswith("xl/"):
+                target = "xl/" + target.lstrip("/")
+            detail_target = target
+            break
+
+        if not detail_target:
+            return {}
+
+        root = ET.fromstring(zf.read(detail_target))
+        rows = root.findall(".//x:sheetData/x:row", NS)
+        if not rows:
+            return {}
+
+        header = parse_row(rows[0], shared)
+        index = {name: idx for idx, name in enumerate(header)}
+
+        def get(values, column_name: str) -> str:
+            idx = index.get(column_name, -1)
+            return values[idx] if 0 <= idx < len(values) else ""
+
+        priority_map = {}
+        for row in rows[1:]:
+            values = parse_row(row, shared)
+            sku = (get(values, "SKU") or "").strip()
+            priority = (get(values, "Priority") or "").strip()
+            if sku and priority:
+                priority_map[sku] = priority
+        return priority_map
+
+
+def read_xlsx_records(path: Path, product_map, priority_map):
     with zipfile.ZipFile(path) as zf:
         shared = read_shared_strings(zf)
         root = ET.fromstring(zf.read("xl/worksheets/sheet1.xml"))
@@ -328,7 +377,7 @@ def read_xlsx_records(path: Path, product_map):
             group_name = product_meta.get("website_group") or derive_group(product_name)
             if is_excluded_report_group(group_name):
                 continue
-            key_summer = product_meta.get("key_summer") or "Khác"
+            key_summer = priority_map.get(display_barcode) or "Chưa phân loại"
             classify = product_meta.get("classify") or "Chưa phân loại"
 
             records.append(
@@ -356,11 +405,12 @@ def read_xlsx_records(path: Path, product_map):
 
 def build_dataset():
     product_map = read_product_mapping()
+    priority_map = read_priority_mapping()
     source_contribution = read_source_contribution()
     records = []
     order_files = sorted(set(BASE_DIR.glob("Orders_T*_20*.xlsx")) | set(BASE_DIR.glob("Order_T*_20*.xlsx")))
     for path in order_files:
-        records.extend(read_xlsx_records(path, product_map))
+        records.extend(read_xlsx_records(path, product_map, priority_map))
 
     if not records:
         raise SystemExit("No order files found.")
@@ -1368,7 +1418,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       </section>
       <div class="note">
         Nguồn dữ liệu: export Haravan trong thư mục local + mapping từ file website. `DT` đang được tính theo doanh thu line-item (`Giá sản phẩm x Số lượng`), để tránh nhân đôi `Tổng cộng` ở các đơn có nhiều sản phẩm.
-        `Barcode`, `Link hình`, `Key Group Summer`, `Classify` được join từ file `/Users/nguyencan/Downloads/Copy of list-sp-hien-website.xlsx`. So sánh `% Δ` dùng kỳ trước có cùng số ngày với kỳ đang chọn.
+        `Barcode`, `Link hình` được join từ file website export; `Priority` được join từ file `Apr_2026_Priority_KPI.xlsx`. So sánh `% Δ` dùng kỳ trước có cùng số ngày với kỳ đang chọn.
       </div>
     </section>
 
@@ -1445,14 +1495,14 @@ HTML_TEMPLATE = r"""<!doctype html>
         channel: "Kênh bán hàng",
         group: "Group",
         barcodeSku: "Barcode / SKU",
-        keySummer: "Key Summer",
+        keySummer: "Priority",
         classify: "Classify",
         cancelStatus: "Trạng thái hủy",
         language: "Ngôn ngữ",
         channelHint: "Bấm chọn nhiều kênh cùng lúc",
         groupHint: "Bấm chọn nhiều group cùng lúc",
         skuHint: "Tìm và tick nhiều SKU",
-        keySummerHint: "Bấm chọn nhiều nhóm key summer",
+        keySummerHint: "Bấm chọn nhiều priority",
         classifyHint: "Bấm chọn nhiều classify",
         sectionTotal: "1. Total DT / Volume",
         sourceGrowthTitle: "Source of Growth",
@@ -1474,10 +1524,10 @@ HTML_TEMPLATE = r"""<!doctype html>
         groupShare: "Tỷ trọng doanh thu theo group",
         groupShareSub: "Top group suy ra từ tên sản phẩm",
         groupSummary: "Tổng hợp group",
-        sectionKeyClassify: "4. Performance by Key Summer / Classify",
-        keySummerTitle: "Key Group Summer",
-        keySummerSub: "Phân tích theo mapping từ file website",
-        keySummerSummary: "Tổng hợp Key Group Summer",
+        sectionKeyClassify: "4. Performance by Priority / Classify",
+        keySummerTitle: "Priority",
+        keySummerSub: "Phân tích theo file Apr_2026_Priority_KPI.xlsx",
+        keySummerSummary: "Tổng hợp Priority",
         classifyTitle: "Classify",
         classifySub: "Phân tích theo BCG/Classify",
         classifySummary: "Tổng hợp Classify",
@@ -1520,14 +1570,14 @@ HTML_TEMPLATE = r"""<!doctype html>
         channel: "Sales channel",
         group: "Group",
         barcodeSku: "Barcode / SKU",
-        keySummer: "Key Summer",
+        keySummer: "Priority",
         classify: "Classify",
         cancelStatus: "Cancel status",
         language: "Language",
         channelHint: "Select multiple channels",
         groupHint: "Select multiple groups",
         skuHint: "Search and tick multiple SKUs",
-        keySummerHint: "Select multiple key summer groups",
+        keySummerHint: "Select multiple priorities",
         classifyHint: "Select multiple classify values",
         sectionTotal: "1. Total Revenue / Volume",
         sourceGrowthTitle: "Source of Growth",
@@ -1549,10 +1599,10 @@ HTML_TEMPLATE = r"""<!doctype html>
         groupShare: "Revenue share by group",
         groupShareSub: "Top groups derived from product names",
         groupSummary: "Group summary",
-        sectionKeyClassify: "4. Performance by Key Summer / Classify",
-        keySummerTitle: "Key Group Summer",
-        keySummerSub: "Analysis based on website mapping",
-        keySummerSummary: "Key Group Summer summary",
+        sectionKeyClassify: "4. Performance by Priority / Classify",
+        keySummerTitle: "Priority",
+        keySummerSub: "Analysis based on Apr_2026_Priority_KPI.xlsx",
+        keySummerSummary: "Priority summary",
         classifyTitle: "Classify",
         classifySub: "Analysis by BCG/Classify",
         classifySummary: "Classify summary",
