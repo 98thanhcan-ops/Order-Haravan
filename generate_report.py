@@ -689,6 +689,17 @@ HTML_TEMPLATE = r"""<!doctype html>
       text-decoration: underline;
       text-underline-offset: 4px;
     }
+    .comparison-note {
+      margin: -4px 0 12px;
+      padding: 10px 14px;
+      border: 1px solid #dbe7f4;
+      border-radius: 12px;
+      background: #f7faff;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .comparison-note strong { color: var(--ink); }
     .metrics {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1258,6 +1269,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     </section>
 
     <h2 class="section-title" data-i18n="sectionTotal">1. Total DT / Volume</h2>
+    <div class="comparison-note" id="comparisonNote"></div>
     <section class="metrics">
       <article class="metric">
         <div class="label">DT</div>
@@ -1824,6 +1836,28 @@ HTML_TEMPLATE = r"""<!doctype html>
       return new Date(iso).toLocaleString("vi-VN");
     }
 
+    function formatPeriodDate(iso, compact = false) {
+      const [year, month, day] = iso.split("-");
+      if (state.lang === "en") {
+        return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: compact ? undefined : "numeric",
+        });
+      }
+      return compact ? `${day}/${month}` : `${day}/${month}/${year}`;
+    }
+
+    function periodLabel(from, to, compact = false) {
+      if (state.lang === "vi" && compact) {
+        const [fromYear, fromMonth, fromDay] = from.split("-");
+        const [toYear, toMonth, toDay] = to.split("-");
+        if (fromYear === toYear && fromMonth === toMonth) return `${fromDay}–${toDay}/${toMonth}/${toYear}`;
+        if (fromYear === toYear) return `${fromDay}/${fromMonth}–${toDay}/${toMonth}/${toYear}`;
+      }
+      return `${formatPeriodDate(from, compact)} – ${formatPeriodDate(to, compact)}`;
+    }
+
     function escapeHtml(text) {
       return String(text)
         .replaceAll("&", "&amp;")
@@ -1882,6 +1916,16 @@ HTML_TEMPLATE = r"""<!doctype html>
       const dt = new Date(isoDate + "T00:00:00");
       dt.setDate(dt.getDate() + days);
       return dt.toISOString().slice(0, 10);
+    }
+
+    function shiftMonthClamped(isoDate, monthOffset) {
+      const [year, month, day] = isoDate.split("-").map(Number);
+      const targetIndex = year * 12 + (month - 1) + monthOffset;
+      const targetYear = Math.floor(targetIndex / 12);
+      const targetMonth = ((targetIndex % 12) + 12) % 12 + 1;
+      const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+      const targetDay = Math.min(day, lastDay);
+      return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(targetDay).padStart(2, "0")}`;
     }
 
     function inRange(date, from, to) {
@@ -2231,18 +2275,22 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     function render() {
       const current = filterRecords(REPORT_DATA.records, state.from, state.to);
-      const spanDays = dayDiff(state.from, state.to);
-      const previousTo = addDays(state.from, -1);
-      const previousFrom = addDays(previousTo, -(spanDays - 1));
+      const previousFrom = shiftMonthClamped(state.from, -1);
+      const previousTo = shiftMonthClamped(state.to, -1);
       const previous = filterRecords(REPORT_DATA.records, previousFrom, previousTo);
+
+      const comparisonNote = document.getElementById("comparisonNote");
+      comparisonNote.innerHTML = state.lang === "en"
+        ? `<strong>Current period:</strong> ${periodLabel(state.from, state.to)} &nbsp;•&nbsp; <strong>Compared with the same dates in the previous month:</strong> ${periodLabel(previousFrom, previousTo)}`
+        : `<strong>Kỳ đang xem:</strong> ${periodLabel(state.from, state.to)} &nbsp;•&nbsp; <strong>So sánh cùng ngày tháng trước:</strong> ${periodLabel(previousFrom, previousTo)}`;
 
       const summary = summarize(current);
       const prevSummary = summarize(previous);
 
-      setMetric("metricRevenue", "metricRevenueDelta", summary.revenue, prevSummary.revenue, formatCompactCurrency, false);
-      setMetric("metricVolume", "metricVolumeDelta", summary.volume, prevSummary.volume, formatCompactUnits, false);
-      setMetric("metricAsp", "metricAspDelta", summary.asp, prevSummary.asp, formatCompactCurrency, false);
-      setMetric("metricCancel", "metricCancelDelta", summary.cancelRate, prevSummary.cancelRate, formatPercent, true);
+      setMetric("metricRevenue", "metricRevenueDelta", summary.revenue, prevSummary.revenue, formatCompactCurrency, false, previousFrom, previousTo);
+      setMetric("metricVolume", "metricVolumeDelta", summary.volume, prevSummary.volume, formatCompactUnits, false, previousFrom, previousTo);
+      setMetric("metricAsp", "metricAspDelta", summary.asp, prevSummary.asp, formatCompactCurrency, false, previousFrom, previousTo);
+      setMetric("metricCancel", "metricCancelDelta", summary.cancelRate, prevSummary.cancelRate, formatPercent, true, previousFrom, previousTo);
 
       renderSourceGrowth(current);
       renderTrendChart(current);
@@ -2290,12 +2338,12 @@ HTML_TEMPLATE = r"""<!doctype html>
       });
     }
 
-    function setMetric(valueId, deltaId, current, previous, formatter, inverse) {
+    function setMetric(valueId, deltaId, current, previous, formatter, inverse, previousFrom, previousTo) {
       document.getElementById(valueId).textContent = formatter(current);
       const delta = pctDelta(current, previous);
       const el = document.getElementById(deltaId);
       el.className = `delta ${Math.abs(delta) < 0.05 ? "flat" : (delta > 0 ? (inverse ? "down" : "up") : (inverse ? "up" : "down"))}`;
-      el.innerHTML = `${Math.abs(delta) < 0.05 ? "•" : (delta > 0 ? "↑" : "↓")} ${formatPercent(Math.abs(delta))} vs kỳ trước`;
+      el.innerHTML = `${Math.abs(delta) < 0.05 ? "•" : (delta > 0 ? "↑" : "↓")} ${formatPercent(Math.abs(delta))} vs ${periodLabel(previousFrom, previousTo, true)}`;
     }
 
     function renderTrendChart(records) {
